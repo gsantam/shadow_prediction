@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import torch
 import torch.nn as nn
-from trainer_base import BaseTrainer
+from scripts.trainer_base import BaseTrainer
 from shadow_prediction.dataset_shadow_gen import get_dataloaders_shadow_gen
 from shadow_prediction.model_shadow_gen import create_shadow_model
 
@@ -70,7 +70,7 @@ class ShadowGenTrainer(BaseTrainer):
 
 def train(num_epochs=10, batch_size=32, learning_rate=1e-3,
           train_size=50000, val_size=5000, base_channels=64,
-          eval_every_n_steps=None, device=None):
+          eval_every_n_steps=None, device=None, plot_curves=False):
     """
     Train the shadow mask generation model.
     
@@ -83,6 +83,7 @@ def train(num_epochs=10, batch_size=32, learning_rate=1e-3,
         base_channels: Base number of channels in U-Net
         eval_every_n_steps: If set, evaluate every N gradient steps instead of every epoch
         device: Device to train on (cuda/mps/cpu). If None, auto-detect.
+        plot_curves: Whether to plot and save training curves
     
     Returns:
         model: Trained model
@@ -98,7 +99,8 @@ def train(num_epochs=10, batch_size=32, learning_rate=1e-3,
         base_channels=base_channels,
         eval_every_n_steps=eval_every_n_steps,
         save_path='shadow_predictor.pth',
-        device=device
+        device=device,
+        plot_curves=plot_curves
     )
     return trainer.train()
 

@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from trainer_base import BaseTrainer
+from scripts.trainer_base import BaseTrainer
 from shadow_prediction.dataset import get_dataloaders
 from shadow_prediction.model import create_model
 
