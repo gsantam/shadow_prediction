@@ -8,82 +8,66 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from tqdm import tqdm
 import matplotlib.pyplot as plt
-
+from trainer_base import BaseTrainer
 from shadow_prediction.dataset import get_dataloaders
 from shadow_prediction.model import create_model
 
 
-def train_epoch(model, train_loader, criterion, optimizer, device):
-    """
-    Train for one epoch.
+class LightPredictionTrainer(BaseTrainer):
+    """Trainer for light position prediction model."""
     
-    Args:
-        model: The model to train
-        train_loader: DataLoader for training data
-        criterion: Loss function
-        optimizer: Optimizer
-        device: Device to train on
+    def create_model(self):
+        """Create ResNet-18 light prediction model."""
+        return create_model(pretrained=False, device=self.device)
     
-    Returns:
-        Average training loss for the epoch
-    """
-    model.train()
-    running_loss = 0.0
+    def create_dataloaders(self):
+        """Create dataloaders for light prediction."""
+        return get_dataloaders(
+            train_size=self.train_size,
+            val_size=self.val_size,
+            batch_size=self.batch_size,
+            img_width=224,
+            img_height=224,
+            num_workers=0
+        )
     
-    for images, light_positions in tqdm(train_loader, desc='Training'):
-        images = images.to(device)
-        light_positions = light_positions.to(device)
+    def create_criterion(self):
+        """Create MSE loss."""
+        return nn.MSELoss()
+    
+    def forward_pass(self, batch):
+        """Forward pass for light prediction."""
+        images, light_positions = batch
         
-        # Forward pass
-        optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, light_positions)
+        # Move to device
+        images = images.to(self.device)
+        light_positions = light_positions.to(self.device)
         
-        # Backward pass
-        loss.backward()
-        optimizer.step()
+        # Forward
+        outputs = self.model(images)
+        loss = self.criterion(outputs, light_positions)
         
-        running_loss += loss.item() * images.size(0)
+        return outputs, light_positions, loss
     
-    epoch_loss = running_loss / len(train_loader.dataset)
-    return epoch_loss
-
-
-def validate(model, val_loader, criterion, device):
-    """
-    Validate the model.
-    
-    Args:
-        model: The model to validate
-        val_loader: DataLoader for validation data
-        criterion: Loss function
-        device: Device to validate on
-    
-    Returns:
-        Average validation loss
-    """
-    model.eval()
-    running_loss = 0.0
-    
-    with torch.no_grad():
-        for images, light_positions in tqdm(val_loader, desc='Validation'):
-            images = images.to(device)
-            light_positions = light_positions.to(device)
-            
-            outputs = model(images)
-            loss = criterion(outputs, light_positions)
-            
-            running_loss += loss.item() * images.size(0)
-    
-    epoch_loss = running_loss / len(val_loader.dataset)
-    return epoch_loss
+    def print_header(self):
+        """Print training header with light prediction specifics."""
+        print("="*50)
+        print("Light Position Prediction Training")
+        print("="*50)
+        print(f"\nTrain samples: {self.train_size}, Val samples: {self.val_size}")
+        print(f"Batch size: {self.batch_size}")
+        print(f"Optimizer: Adam (lr={self.learning_rate})")
+        print(f"Loss function: MSE")
+        print(f"Device: {self.device}")
+        if self.eval_every_n_steps:
+            print(f"Evaluating every {self.eval_every_n_steps} steps")
+        print("="*50)
 
 
 def train(num_epochs=10, batch_size=16, learning_rate=1e-3, device=None,
-          train_size=800, val_size=200, save_path='light_predictor.pth', eval_every_n_steps=None):
+          train_size=800, val_size=200, save_path='light_predictor.pth',
+          eval_every_n_steps=None, plot_curves=True):
     """
     Main training function.
     
@@ -96,110 +80,38 @@ def train(num_epochs=10, batch_size=16, learning_rate=1e-3, device=None,
         val_size: Number of validation samples
         save_path: Path to save the best model
         eval_every_n_steps: If set, evaluate every N training steps instead of every epoch
+        plot_curves: Whether to plot and save training curves
+        
+    Returns:
+        model: Trained model
+        train_losses: List of training losses
+        val_losses: List of validation losses
     """
-    # Setup device
-    if device is None:
-        if torch.cuda.is_available():
-            device = torch.device('cuda')
-        elif torch.backends.mps.is_available():
-            device = torch.device('mps')
-        else:
-            device = torch.device('cpu')
-    print(f'Using device: {device}')
-    
-    # Create dataloaders
-    print('Creating dataloaders...')
-    train_loader, val_loader = get_dataloaders(
+    trainer = LightPredictionTrainer(
+        num_epochs=num_epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
         train_size=train_size,
         val_size=val_size,
-        batch_size=batch_size,
-        img_width=224,
-        img_height=224,
-        num_workers=0
+        eval_every_n_steps=eval_every_n_steps,
+        save_path=save_path,
+        device=device
     )
     
-    # Create model
-    print('Creating model...')
-    model = create_model(pretrained=False, device=device)
-    
-    # Loss and optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    
-    # Training loop
-    train_losses = []
-    val_losses = []
-    best_val_loss = float('inf')
-    global_step = 0
-    
-    for epoch in range(num_epochs):
-        print(f'\nEpoch {epoch+1}/{num_epochs}')
-        
-        model.train()
-        epoch_loss = 0.0
-        
-        # Training with optional mid-epoch evaluation
-        for batch_idx, (images, light_positions) in enumerate(tqdm(train_loader, desc='Training')):
-            images = images.to(device)
-            light_positions = light_positions.to(device)
-            
-            # Forward pass
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, light_positions)
-            
-            # Backward pass
-            loss.backward()
-            optimizer.step()
-            
-            epoch_loss += loss.item() * images.size(0)
-            global_step += 1
-            
-            # Evaluate every n steps if specified
-            if eval_every_n_steps is not None and global_step % eval_every_n_steps == 0:
-                val_loss = validate(model, val_loader, criterion, device)
-                val_losses.append(val_loss)
-                
-                print(f'\nStep {global_step}: Val Loss: {val_loss:.4f}')
-                
-                # Save best model
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    torch.save(model.state_dict(), save_path)
-                    print(f'Model saved to {save_path}')
-                
-                model.train()  # Return to training mode
-        
-        # End of epoch
-        train_loss = epoch_loss / len(train_loader.dataset)
-        train_losses.append(train_loss)
-        
-        # Validate at end of epoch (if not using step-based evaluation)
-        if eval_every_n_steps is None:
-            val_loss = validate(model, val_loader, criterion, device)
-            val_losses.append(val_loss)
-            
-            print(f'Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}')
-            
-            # Save best model
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                torch.save(model.state_dict(), save_path)
-                print(f'Model saved to {save_path}')
-        else:
-            print(f'Train Loss: {train_loss:.4f}')
+    model, train_losses, val_losses = trainer.train()
     
     # Plot training curves
-    plt.figure(figsize=(10, 5))
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(val_losses, label='Val Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss (MSE)')
-    plt.title('Training and Validation Loss')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('training_curve.png')
-    print('Training curve saved to training_curve.png')
+    if plot_curves:
+        plt.figure(figsize=(10, 5))
+        plt.plot(train_losses, label='Train Loss')
+        plt.plot(val_losses, label='Val Loss')
+        plt.xlabel('Evaluation Step')
+        plt.ylabel('Loss (MSE)')
+        plt.title('Training and Validation Loss')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig('training_curve.png')
+        print('Training curve saved to training_curve.png')
     
     return model, train_losses, val_losses
 
