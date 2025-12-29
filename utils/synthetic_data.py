@@ -161,24 +161,23 @@ def _generate_scene_data(random_projection=True, randomize_objects=True, add_sha
     if random_projection:
         azimuth = np.random.uniform(0, 2 * np.pi)
         elevation = np.random.uniform(np.radians(10), np.radians(80))
-        
-        # Camera position using spherical coordinates
-        camera_pos = spherical_to_cartesian(azimuth, elevation, radius=20)
-        normal = camera_pos / np.linalg.norm(camera_pos)
-        
-        # u_vec is horizontal, perpendicular to normal's xy projection
-        u_vec = np.array([-normal[1], normal[0], 0])
-        u_vec = u_vec / np.linalg.norm(u_vec)
-        
-        # v_vec points upward in the image (positive z component)
-        v_vec = np.cross(normal, u_vec)
-        v_vec = v_vec / np.linalg.norm(v_vec)
-        if v_vec[2] < 0:
-            v_vec = -v_vec
     else:
-        u_vec = np.array([1, 0, 0])
-        v_vec = np.array([0, 0, 1])
-        camera_pos = np.array([0, 20, 0])
+        azimuth = 0
+        elevation = np.radians(45)
+
+    # Camera position using spherical coordinates
+    camera_pos = spherical_to_cartesian(azimuth, elevation, radius=20)
+    normal = camera_pos / np.linalg.norm(camera_pos)
+    
+    # u_vec is horizontal, perpendicular to normal's xy projection
+    u_vec = np.array([-normal[1], normal[0], 0])
+    u_vec = u_vec / np.linalg.norm(u_vec)
+    
+    # v_vec points upward in the image (positive z component)
+    v_vec = np.cross(normal, u_vec)
+    v_vec = v_vec / np.linalg.norm(v_vec)
+    if v_vec[2] < 0:
+        v_vec = -v_vec
     
     # Project to plane
     def project_to_plane(x, y, z):
@@ -232,7 +231,7 @@ def _generate_scene_data(random_projection=True, randomize_objects=True, add_sha
 
 def generate_synthetic_scene(random_projection=True, randomize_objects=True, 
                               add_shadows=True, img_width=800, img_height=600, 
-                              return_scene_data=False):
+                              return_scene_data=False, return_separate_masks=False):
     """
     Generate a 3D scene with cylinder and cone, render as black & white 2D image.
     NO PLOTTING - just returns the binary image array.
@@ -244,15 +243,63 @@ def generate_synthetic_scene(random_projection=True, randomize_objects=True,
         img_width: Width of output image
         img_height: Height of output image
         return_scene_data: If True, returns (image, scene_data) tuple
+        return_separate_masks: If True, returns (image_without_shadows, shadow_mask, image_with_shadows)
+                              where shadow_mask is binary (1=shadow, 0=no shadow)
     
     Returns:
         Binary image array (1, img_width, img_height)
         OR tuple of (image, scene_data) if return_scene_data=True
+        OR tuple of (image_without_shadows, shadow_mask, image_with_shadows, scene_data) 
+           if return_separate_masks=True
     """
     # Generate all scene data
     data = _generate_scene_data(random_projection, randomize_objects, add_shadows)
     
-    # Create binary image
+    if return_separate_masks:
+        # Create three separate images
+        image_with_shadows = np.ones((img_height, img_width))
+        image_without_shadows = np.ones((img_height, img_width))
+        shadow_mask = np.zeros((img_height, img_width))
+        
+        # Rasterize shadows separately
+        if add_shadows:
+            if len(data['cyl_shadow_points']) > 3:
+                shadow_mask = rasterize_convex_hull(shadow_mask, data['cyl_shadow_points'], 
+                                                    data['u_range'], data['v_range'], 
+                                                    img_width, img_height, 1.0)
+                image_with_shadows = rasterize_convex_hull(image_with_shadows, data['cyl_shadow_points'], 
+                                                           data['u_range'], data['v_range'], 
+                                                           img_width, img_height, 0.5)
+            if len(data['cone_shadow_points']) > 3:
+                shadow_mask = rasterize_convex_hull(shadow_mask, data['cone_shadow_points'], 
+                                                    data['u_range'], data['v_range'], 
+                                                    img_width, img_height, 1.0)
+                image_with_shadows = rasterize_convex_hull(image_with_shadows, data['cone_shadow_points'], 
+                                                           data['u_range'], data['v_range'], 
+                                                           img_width, img_height, 0.5)
+        
+        # Rasterize objects on both images (objects overwrite shadows)
+        image_with_shadows = rasterize_convex_hull(image_with_shadows, data['cyl_points'], 
+                                                   data['u_range'], data['v_range'], 
+                                                   img_width, img_height, 0)
+        image_with_shadows = rasterize_convex_hull(image_with_shadows, data['cone_points'], 
+                                                   data['u_range'], data['v_range'], 
+                                                   img_width, img_height, 0)
+        image_without_shadows = rasterize_convex_hull(image_without_shadows, data['cyl_points'], 
+                                                      data['u_range'], data['v_range'], 
+                                                      img_width, img_height, 0)
+        image_without_shadows = rasterize_convex_hull(image_without_shadows, data['cone_points'], 
+                                                      data['u_range'], data['v_range'], 
+                                                      img_width, img_height, 0)
+        
+        # Add channel dimension
+        image_without_shadows = image_without_shadows[np.newaxis, :, :]
+        shadow_mask = shadow_mask[np.newaxis, :, :]
+        image_with_shadows = image_with_shadows[np.newaxis, :, :]
+        
+        return image_without_shadows, shadow_mask, image_with_shadows, data
+    
+    # Original behavior: create composite image
     image = np.ones((img_height, img_width))
     
     # Rasterize shadows first

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from synthetic_data import generate_synthetic_scene
+from utils.synthetic_data import generate_synthetic_scene
 
 
 class SyntheticShadowDataset(Dataset):
@@ -41,7 +41,7 @@ class SyntheticShadowDataset(Dataset):
         """
         # Generate synthetic scene with light position
         image, scene_data = generate_synthetic_scene(
-            random_projection=True,
+            random_projection=False,
             randomize_objects=True,
             add_shadows=True,
             img_width=self.img_width,

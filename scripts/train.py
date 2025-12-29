@@ -83,7 +83,7 @@ def validate(model, val_loader, criterion, device):
 
 
 def train(num_epochs=10, batch_size=16, learning_rate=1e-3, device=None,
-          train_size=800, val_size=200, save_path='light_predictor.pth'):
+          train_size=800, val_size=200, save_path='light_predictor.pth', eval_every_n_steps=None):
     """
     Main training function.
     
@@ -95,6 +95,7 @@ def train(num_epochs=10, batch_size=16, learning_rate=1e-3, device=None,
         train_size: Number of training samples
         val_size: Number of validation samples
         save_path: Path to save the best model
+        eval_every_n_steps: If set, evaluate every N training steps instead of every epoch
     """
     # Setup device
     if device is None:
@@ -129,25 +130,64 @@ def train(num_epochs=10, batch_size=16, learning_rate=1e-3, device=None,
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
+    global_step = 0
     
     for epoch in range(num_epochs):
         print(f'\nEpoch {epoch+1}/{num_epochs}')
         
-        # Train
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
+        model.train()
+        epoch_loss = 0.0
+        
+        # Training with optional mid-epoch evaluation
+        for batch_idx, (images, light_positions) in enumerate(tqdm(train_loader, desc='Training')):
+            images = images.to(device)
+            light_positions = light_positions.to(device)
+            
+            # Forward pass
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, light_positions)
+            
+            # Backward pass
+            loss.backward()
+            optimizer.step()
+            
+            epoch_loss += loss.item() * images.size(0)
+            global_step += 1
+            
+            # Evaluate every n steps if specified
+            if eval_every_n_steps is not None and global_step % eval_every_n_steps == 0:
+                val_loss = validate(model, val_loader, criterion, device)
+                val_losses.append(val_loss)
+                
+                print(f'\nStep {global_step}: Val Loss: {val_loss:.4f}')
+                
+                # Save best model
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    torch.save(model.state_dict(), save_path)
+                    print(f'Model saved to {save_path}')
+                
+                model.train()  # Return to training mode
+        
+        # End of epoch
+        train_loss = epoch_loss / len(train_loader.dataset)
         train_losses.append(train_loss)
         
-        # Validate
-        val_loss = validate(model, val_loader, criterion, device)
-        val_losses.append(val_loss)
-        
-        print(f'Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}')
-        
-        # Save best model
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            torch.save(model.state_dict(), save_path)
-            print(f'Model saved to {save_path}')
+        # Validate at end of epoch (if not using step-based evaluation)
+        if eval_every_n_steps is None:
+            val_loss = validate(model, val_loader, criterion, device)
+            val_losses.append(val_loss)
+            
+            print(f'Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}')
+            
+            # Save best model
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(model.state_dict(), save_path)
+                print(f'Model saved to {save_path}')
+        else:
+            print(f'Train Loss: {train_loss:.4f}')
     
     # Plot training curves
     plt.figure(figsize=(10, 5))
