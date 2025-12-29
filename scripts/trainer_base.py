@@ -4,6 +4,7 @@ Base trainer class for common training logic.
 
 import torch
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 class BaseTrainer:
@@ -14,7 +15,8 @@ class BaseTrainer:
     
     def __init__(self, num_epochs=10, batch_size=32, learning_rate=1e-3,
                  train_size=50000, val_size=5000, eval_every_n_steps=None,
-                 save_path='model.pth', device=None):
+                 save_path='model.pth', device=None, minimize_metric=True,
+                 plot_curves=False, task_name='Training', loss_name='Loss'):
         """
         Initialize trainer.
         
@@ -27,6 +29,10 @@ class BaseTrainer:
             eval_every_n_steps: If set, evaluate every N steps instead of every epoch
             save_path: Path to save best model checkpoint
             device: Device to train on (cuda/mps/cpu). If None, auto-detect.
+            minimize_metric: If True, lower metric is better. If False, higher is better.
+            plot_curves: Whether to plot and save training curves after training
+            task_name: Name of the training task (for header)
+            loss_name: Name of the loss function (for header)
         """
         self.num_epochs = num_epochs
         self.batch_size = batch_size
@@ -35,6 +41,10 @@ class BaseTrainer:
         self.val_size = val_size
         self.eval_every_n_steps = eval_every_n_steps
         self.save_path = save_path
+        self.minimize_metric = minimize_metric
+        self.plot_curves = plot_curves
+        self.task_name = task_name
+        self.loss_name = loss_name
         
         # Auto-detect device
         if device is None:
@@ -97,25 +107,57 @@ class BaseTrainer:
         return running_loss / len(self.val_loader)
     
     def save_if_best(self, val_loss, best_val_loss):
-        """Save model if validation loss improved."""
-        if val_loss < best_val_loss:
+        """Save model if validation metric improved."""
+        is_better = (val_loss < best_val_loss) if self.minimize_metric else (val_loss > best_val_loss)
+        if is_better:
             best_val_loss = val_loss
             torch.save(self.model.state_dict(), self.save_path)
-            print(f"💾 Saved best model (val_loss: {val_loss:.4f})")
+            print(f"💾 Saved best model (val_metric: {val_loss:.4f})")
         return best_val_loss
     
+    def get_extra_info_lines(self):
+        """Get extra info lines to print in header. Override to add custom info."""
+        return []
+    
     def print_header(self):
-        """Print training header. Can be overridden."""
+        """Print training header."""
         print("="*50)
-        print("Training")
+        print(self.task_name)
         print("="*50)
         print(f"\nTrain samples: {self.train_size}, Val samples: {self.val_size}")
         print(f"Batch size: {self.batch_size}")
         print(f"Optimizer: Adam (lr={self.learning_rate})")
+        print(f"Loss function: {self.loss_name}")
+        
+        # Add any extra info from subclass
+        for line in self.get_extra_info_lines():
+            print(line)
+        
         print(f"Device: {self.device}")
         if self.eval_every_n_steps:
             print(f"Evaluating every {self.eval_every_n_steps} steps")
         print("="*50)
+    
+    def plot_training_curves(self, train_losses, val_losses, save_path='training_curve.png'):
+        """
+        Plot and save training curves.
+        Can be overridden to customize plot.
+        
+        Args:
+            train_losses: List of training losses
+            val_losses: List of validation losses
+            save_path: Path to save the plot
+        """
+        plt.figure(figsize=(10, 5))
+        plt.plot(train_losses, label='Train Loss')
+        plt.plot(val_losses, label='Val Loss')
+        plt.xlabel('Evaluation Step')
+        plt.ylabel('Loss')
+        plt.title('Training and Validation Loss')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(save_path)
+        print(f'Training curve saved to {save_path}')
     
     def train(self):
         """
@@ -131,6 +173,7 @@ class BaseTrainer:
         
         print("\nCreating model...")
         self.model = self.create_model()
+        print(f"Using device: {self.device}")
         
         print("Creating dataloaders...")
         self.train_loader, self.val_loader = self.create_dataloaders()
@@ -142,7 +185,7 @@ class BaseTrainer:
         # Training loop
         train_losses = []
         val_losses = []
-        best_val_loss = float('inf')
+        best_val_loss = float('inf') if self.minimize_metric else float('-inf')
         global_step = 0
         
         for epoch in range(1, self.num_epochs + 1):
@@ -188,5 +231,9 @@ class BaseTrainer:
                 })
         
         print(f"\n✅ Training complete. Best model saved to {self.save_path} (val_loss: {best_val_loss:.4f})")
+        
+        # Plot training curves if requested
+        if self.plot_curves:
+            self.plot_training_curves(train_losses, val_losses)
         
         return self.model, train_losses, val_losses

@@ -24,6 +24,8 @@ class ShadowGenTrainer(BaseTrainer):
             base_channels: Base number of channels in U-Net
             **kwargs: Arguments passed to BaseTrainer
         """
+        kwargs.setdefault('task_name', 'Shadow Mask Generation Training')
+        kwargs.setdefault('loss_name', 'Binary Cross Entropy')
         super().__init__(**kwargs)
         self.base_channels = base_channels
     
@@ -61,20 +63,9 @@ class ShadowGenTrainer(BaseTrainer):
         
         return output, target, loss
     
-    def print_header(self):
-        """Print training header with shadow gen specifics."""
-        print("="*50)
-        print("Shadow Mask Generation Training")
-        print("="*50)
-        print(f"\nTrain samples: {self.train_size}, Val samples: {self.val_size}")
-        print(f"Batch size: {self.batch_size}")
-        print(f"Optimizer: Adam (lr={self.learning_rate})")
-        print(f"Loss function: Binary Cross Entropy")
-        print(f"Base channels: {self.base_channels}")
-        print(f"Device: {self.device}")
-        if self.eval_every_n_steps:
-            print(f"Evaluating every {self.eval_every_n_steps} steps")
-        print("="*50)
+    def get_extra_info_lines(self):
+        """Add base_channels info to header."""
+        return [f"Base channels: {self.base_channels}"]
 
 
 def train(num_epochs=10, batch_size=32, learning_rate=1e-3,
