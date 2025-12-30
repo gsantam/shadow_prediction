@@ -127,6 +127,7 @@ dmypy.json
 *.pth
 *.pt
 *.ckpt
+models_checkpoints/
 
 # Training outputs
 training_curve.png

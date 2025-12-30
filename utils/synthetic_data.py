@@ -292,6 +292,10 @@ def generate_synthetic_scene(random_projection=True, randomize_objects=True,
                                                       data['u_range'], data['v_range'], 
                                                       img_width, img_height, 0)
         
+        # Remove object bases from shadow mask (only observable shadow, not shape footprints)
+        # Where objects are present (value 0 in image_without_shadows), set shadow_mask to 0
+        shadow_mask[image_without_shadows < 0.5] = 0.0
+        
         # Add channel dimension
         image_without_shadows = image_without_shadows[np.newaxis, :, :]
         shadow_mask = shadow_mask[np.newaxis, :, :]
