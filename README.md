@@ -137,6 +137,12 @@ model, train_losses, val_losses = train(
 
 ## Examples
 
+### Predicted Shadow Comparison
+
+Ground-truth synthetic shadows are shown on the left. On the right, the same scenes are re-rendered using the light positions predicted by the trained model.
+
+![Ground-truth shadows and predicted-light shadow re-renders](assets/shadow_prediction_examples.png)
+
 ### Sample Generated Scene
 
 The generator creates diverse training data with:
