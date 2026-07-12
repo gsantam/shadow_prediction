@@ -42,17 +42,50 @@ The current codebase contains three related tracks:
 
 ## Current Focus
 
-The most active path is the RobotCar sun-direction predictor. It is a stepping
-stone toward shadow prediction on real street imagery:
+We start with a much simpler problem that can give us hope for the harder one:
+
+```text
+given a street image and the place where it was taken, can we predict the sun position?
+```
+
+For this we use the Oxford RobotCar dataset. It was collected by a car driving
+around Oxford many times, across different days, seasons, weather conditions,
+and times of day. The car has several cameras, so the dataset contains street
+images from different viewing directions, plus location and timestamp metadata.
+In the Kaggle archive used here, the main inputs are:
+
+- RGB images from the car cameras: `stereo_centre`, `mono_left`, `mono_right`,
+  and `mono_rear`.
+- The car location, stored as `northing/easting`.
+- The image timestamp.
+- A rough car heading estimated from nearby location points.
+- Run tags from the RobotCar SDK, including whether a run is marked as `sun`.
+
+From the timestamp and location we can compute an approximate sun vector. The
+learning problem is then:
 
 ```text
 RGB image + location + heading + camera id -> sun direction
 ```
 
-The model does not yet predict shadows directly for RobotCar. Instead, it tests
-whether the image carries enough visual evidence, including shadows, to recover
-the sun direction. If that signal is learnable, the next step is to train a
-decoder or renderer conditioned on a street scene and an explicit sun vector.
+This is not shadow prediction yet. It is a test of whether the image contains
+enough information about lighting and shadows for a model to recover where the
+sun was. If this works, then it is more reasonable to try the harder problem:
+taking a street scene and asking what its shadows should look like under a new
+sun position.
+
+Examples from the RobotCar data:
+
+<table>
+  <tr>
+    <th>Sun-tagged run</th>
+    <th>Non-sun run</th>
+  </tr>
+  <tr>
+    <td><img src="assets/robotcar_sun_example.jpg" alt="Oxford RobotCar sunny street image with visible shadows" width="100%"></td>
+    <td><img src="assets/robotcar_not_sun_example.jpg" alt="Oxford RobotCar non-sunny street image with weaker shadows" width="100%"></td>
+  </tr>
+</table>
 
 ## Project Layout
 
