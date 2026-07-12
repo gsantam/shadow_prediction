@@ -124,18 +124,10 @@ which image patches the final representation attends to.
 
 ![RobotCar ViT-B/16 attention overlays](assets/robotcar_vit_b16_attention_overlay.png)
 
-The left column is the original image. The middle column overlays direct `CLS`
-attention from the last transformer layer. In plain terms: at the final layer,
-which patches does the model look at most when forming the global representation
-used for the sun prediction?
-
-The right column overlays attention rollout. Rollout tries to account for the
-fact that information is mixed across many transformer layers, not only the last
-one. It averages attention heads, adds the residual/self connection, and
-multiplies the attention matrices through the layers. The result is an
-approximate map of how much each input patch can influence the final `CLS` token
-after the whole network. It is useful as a diagnostic, but it should not be read
-as an exact causal explanation.
+The highest-attention patches from the direct `CLS` attention and the rollout
+map are visually quite aligned with shadows in the images. Here, rollout means
+the attention signal propagated across transformer layers, instead of looking
+only at the final layer.
 
 ## Project Layout
 
