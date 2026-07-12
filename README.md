@@ -129,6 +129,27 @@ map are visually quite aligned with shadows in the images. Here, rollout means
 the attention signal propagated across transformer layers, instead of looking
 only at the final layer.
 
+## Synthetic Shadow Playground
+
+As a playground / middle step, we create a synthetic scene with concrete shadows
+and project those shadows according to different light source positions. The
+input is a simple shadow-free scene plus a 3D light position, and the target is
+the shadow mask for that same scene under that light.
+
+The model trained for this is `ShadowMaskPredictor`, a small U-Net in
+`shadow_prediction/model_shadow_gen.py`. It does not reason about 3D geometry
+explicitly. It learns a direct pixel-level mapping:
+
+```text
+shadow-free synthetic scene + light position -> shadow pixels
+```
+
+This gives us a controlled setup where we can test whether a network can learn
+the relation between scene layout, light position, and shadow shape before
+moving to real street scenes.
+
+![Synthetic pixel-level shadow prediction](assets/synthetic_shadow_pixel_predictor.png)
+
 ## Project Layout
 
 ```text
@@ -284,15 +305,9 @@ python scripts/render_robotcar_vit_attention.py \
 For `vit_s_8_timm` at image size `112`, the attention grid is `14 x 14`.
 For `vit_b_16` at image size `112`, the attention grid is `7 x 7`.
 
-### Train the Synthetic Shadow Baselines
+### Train the Synthetic Shadow Predictor
 
-Original synthetic light-position prediction:
-
-```bash
-python scripts/train.py
-```
-
-Direct shadow-mask prediction:
+This trains the pixel-level U-Net baseline on generated synthetic scenes:
 
 ```bash
 python scripts/train_shadow_gen.py
@@ -359,14 +374,6 @@ geometry, segmentation, depth, camera orientation, and explicit sun conditioning
 - tqdm
 - Pillow
 - kaggle, only for Kaggle download helpers
-
-## Example
-
-Ground-truth synthetic shadows are shown on the left. On the right, the same
-scenes are re-rendered using light positions predicted by the trained synthetic
-model.
-
-![Ground-truth shadows and predicted-light shadow re-renders](assets/shadow_prediction_examples.png)
 
 ## License
 
