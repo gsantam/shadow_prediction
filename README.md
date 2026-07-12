@@ -104,10 +104,10 @@ locations for the sun-tagged RobotCar subset:
 
 ViTs with fine patches work quite well here. At image size `112`, the
 `vit_s_8_timm` model uses 8-pixel patches, so the image is represented as a
-`14 x 14` patch grid. This worked surprisingly much better than the ResNet CNN
-baseline in our runs:
+`14 x 14` patch grid. Below is the validation breakdown for that model, split by
+sun-tagged runs, non-sun runs, and camera type:
 
-![RobotCar CNN vs fine-patch ViT learning curves](assets/robotcar_resnet_vs_vit_s8_learning_curves.png)
+![RobotCar ViT-S/8 sun and camera validation breakdown](assets/robotcar_vit_s8_sun_camera_breakdown.png)
 
 ## Project Layout
 
