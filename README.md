@@ -109,6 +109,31 @@ sun-tagged runs, non-sun runs, and camera type:
 
 ![RobotCar ViT-S/8 sun and camera validation breakdown](assets/robotcar_vit_s8_sun_camera_breakdown.png)
 
+Performance is much better on the images from sun-tagged runs than on non-sun
+runs. This is a useful sign that the model is using visible lighting and shadow
+cues in the scene to identify the sun position. It is not a perfect proof,
+because non-sun runs also differ in weather and image distribution, but it is
+the behaviour we would expect if shadows are carrying real signal.
+
+We can look one step deeper by plotting the ViT attention scores. The image is
+split into patches, and the model has a special `CLS` token that gathers
+information from those patches before the final prediction. A `CLS`-to-patch
+attention heat map shows which image patches the final representation attends to.
+
+![RobotCar ViT-S/8 CLS attention patch scores](assets/robotcar_vit_s8_attention_patch_scores.png)
+
+The middle column shows direct `CLS` attention in the last transformer layer. In
+plain terms: at the final layer, which patches does the model look at most when
+forming the global representation used for the sun prediction?
+
+The right column shows attention rollout. Rollout tries to account for the fact
+that information is mixed across many transformer layers, not only the last one.
+It averages attention heads, adds the residual/self connection, and multiplies
+the attention matrices through the layers. The result is an approximate map of
+how much each input patch can influence the final `CLS` token after the whole
+network. It is useful as a diagnostic, but it should not be read as an exact
+causal explanation.
+
 ## Project Layout
 
 ```text
