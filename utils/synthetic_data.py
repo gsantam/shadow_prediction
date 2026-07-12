@@ -116,6 +116,253 @@ def rasterize_convex_hull(img, points, u_range, v_range, img_width, img_height, 
     return img
 
 
+def _projection_basis(scene_data):
+    """Return the 2D projection basis for a generated scene."""
+    normal = scene_data["camera_pos"] / np.linalg.norm(scene_data["camera_pos"])
+
+    u_vec = np.array([-normal[1], normal[0], 0.0])
+    u_vec = u_vec / np.linalg.norm(u_vec)
+
+    v_vec = np.cross(normal, u_vec)
+    v_vec = v_vec / np.linalg.norm(v_vec)
+    if v_vec[2] < 0:
+        v_vec = -v_vec
+
+    return u_vec, v_vec
+
+
+def _project_to_plane(x, y, z, u_vec, v_vec):
+    """Project 3D points onto a scene's 2D image plane."""
+    points_3d = np.stack([x.ravel(), y.ravel(), z.ravel()], axis=1)
+    u = np.dot(points_3d, u_vec)
+    v = np.dot(points_3d, v_vec)
+    return u, v
+
+
+def _shadow_points_for_light(scene_data, light_pos):
+    """Compute projected shadow polygons for a fixed scene and light position."""
+    u_vec, v_vec = _projection_basis(scene_data)
+
+    cyl_shadow_x, cyl_shadow_y = compute_shadow(
+        scene_data["cyl_x"], scene_data["cyl_y"], scene_data["cyl_z"], light_pos
+    )
+    cone_shadow_x, cone_shadow_y = compute_shadow(
+        scene_data["cone_x"], scene_data["cone_y"], scene_data["cone_z"], light_pos
+    )
+
+    cyl_shadow_u, cyl_shadow_v = _project_to_plane(
+        cyl_shadow_x, cyl_shadow_y, np.zeros_like(cyl_shadow_x), u_vec, v_vec
+    )
+    cone_shadow_u, cone_shadow_v = _project_to_plane(
+        cone_shadow_x, cone_shadow_y, np.zeros_like(cone_shadow_x), u_vec, v_vec
+    )
+
+    return (
+        np.column_stack([cyl_shadow_u, cyl_shadow_v]),
+        np.column_stack([cone_shadow_u, cone_shadow_v]),
+    )
+
+
+def _render_ranges_for_lights(scene_data, light_positions, padding=0.5):
+    """Compute shared image bounds that contain objects and all requested shadows."""
+    point_sets = [scene_data["cyl_points"], scene_data["cone_points"]]
+
+    for light_pos in light_positions:
+        cyl_shadow_points, cone_shadow_points = _shadow_points_for_light(scene_data, light_pos)
+        if len(cyl_shadow_points) > 0:
+            point_sets.append(cyl_shadow_points)
+        if len(cone_shadow_points) > 0:
+            point_sets.append(cone_shadow_points)
+
+    points = np.vstack(point_sets)
+    u_range = (points[:, 0].min() - padding, points[:, 0].max() + padding)
+    v_range = (points[:, 1].min() - padding, points[:, 1].max() + padding)
+    return u_range, v_range
+
+
+def render_scene_with_light(scene_data, light_pos, img_width=224, img_height=224,
+                            u_range=None, v_range=None):
+    """
+    Render a fixed generated scene with a supplied light position.
+
+    Returns a single-channel image with values:
+      0.0 objects, 0.5 shadows, 1.0 background.
+    """
+    cyl_shadow_points, cone_shadow_points = _shadow_points_for_light(scene_data, light_pos)
+
+    if u_range is None or v_range is None:
+        u_range, v_range = _render_ranges_for_lights(scene_data, [light_pos])
+
+    image = np.ones((img_height, img_width), dtype=np.float32)
+
+    if len(cyl_shadow_points) > 3:
+        image = rasterize_convex_hull(
+            image, cyl_shadow_points, u_range, v_range, img_width, img_height, 0.5
+        )
+    if len(cone_shadow_points) > 3:
+        image = rasterize_convex_hull(
+            image, cone_shadow_points, u_range, v_range, img_width, img_height, 0.5
+        )
+
+    image = rasterize_convex_hull(
+        image, scene_data["cyl_points"], u_range, v_range, img_width, img_height, 0.0
+    )
+    image = rasterize_convex_hull(
+        image, scene_data["cone_points"], u_range, v_range, img_width, img_height, 0.0
+    )
+
+    return image[np.newaxis, :, :].astype(np.float32)
+
+
+def render_scene_without_shadows(scene_data, img_width=224, img_height=224,
+                                 u_range=None, v_range=None):
+    """
+    Render only the fixed object geometry for a scene.
+
+    Returns a single-channel image with values:
+      0.0 objects, 1.0 background.
+    """
+    if u_range is None or v_range is None:
+        object_points = np.vstack([scene_data["cyl_points"], scene_data["cone_points"]])
+        u_range = (object_points[:, 0].min() - 0.5, object_points[:, 0].max() + 0.5)
+        v_range = (object_points[:, 1].min() - 0.5, object_points[:, 1].max() + 0.5)
+
+    image = np.ones((img_height, img_width), dtype=np.float32)
+    image = rasterize_convex_hull(
+        image, scene_data["cyl_points"], u_range, v_range, img_width, img_height, 0.0
+    )
+    image = rasterize_convex_hull(
+        image, scene_data["cone_points"], u_range, v_range, img_width, img_height, 0.0
+    )
+    return image[np.newaxis, :, :].astype(np.float32)
+
+
+def shadow_mask_from_image(image):
+    """Extract a binary visible-shadow mask from a rendered shadow scene."""
+    return ((image > 0.25) & (image < 0.75)).astype(np.float32)
+
+
+def generate_synthetic_shadow_transition(random_projection=False, randomize_objects=True,
+                                         img_width=224, img_height=224,
+                                         return_scene_data=False):
+    """
+    Generate a paired shadow transition for the same scene under two sun positions.
+
+    State: start scene with shadows.
+    Action: sun_end - sun_start.
+    Target: end scene with shadows.
+    """
+    scene_data = _generate_scene_data(
+        random_projection=random_projection,
+        randomize_objects=randomize_objects,
+        add_shadows=False,
+    )
+
+    sun_start = random_point_on_sphere()
+    sun_end = random_point_on_sphere()
+    sun_delta = (sun_end - sun_start).astype(np.float32)
+
+    u_range, v_range = _render_ranges_for_lights(scene_data, [sun_start, sun_end])
+    start_image = render_scene_with_light(
+        scene_data, sun_start, img_width=img_width, img_height=img_height,
+        u_range=u_range, v_range=v_range
+    )
+    end_image = render_scene_with_light(
+        scene_data, sun_end, img_width=img_width, img_height=img_height,
+        u_range=u_range, v_range=v_range
+    )
+
+    if return_scene_data:
+        scene_data = dict(scene_data)
+        scene_data.update({
+            "sun_start": sun_start,
+            "sun_end": sun_end,
+            "sun_delta": sun_delta,
+            "u_range": u_range,
+            "v_range": v_range,
+        })
+        return start_image, sun_delta, end_image, scene_data
+
+    return start_image, sun_delta, end_image
+
+
+def generate_synthetic_shadow_mask_sequence(num_steps=4, random_projection=False,
+                                            randomize_objects=True, img_width=224,
+                                            img_height=224, return_scene_data=False):
+    """
+    Generate shadow-only states with a shared shadow-free scene context.
+
+    Context: scene_without_shadows is fixed object geometry.
+    States: shadow_masks[0:T] are visible shadow masks.
+    Actions: sun_{t+1} - sun_t.
+    """
+    images, sun_deltas, scene_data = generate_synthetic_shadow_sequence(
+        num_steps=num_steps,
+        random_projection=random_projection,
+        randomize_objects=randomize_objects,
+        img_width=img_width,
+        img_height=img_height,
+        return_scene_data=True,
+    )
+    scene_without_shadows = render_scene_without_shadows(
+        scene_data,
+        img_width=img_width,
+        img_height=img_height,
+        u_range=scene_data["u_range"],
+        v_range=scene_data["v_range"],
+    )
+    shadow_masks = shadow_mask_from_image(images)
+
+    if return_scene_data:
+        return scene_without_shadows, shadow_masks, sun_deltas, scene_data
+    return scene_without_shadows, shadow_masks, sun_deltas
+
+
+def generate_synthetic_shadow_sequence(num_steps=4, random_projection=False,
+                                       randomize_objects=True, img_width=224,
+                                       img_height=224, return_scene_data=False):
+    """
+    Generate a sequence of the same scene under multiple sun positions.
+
+    States: shadowed scenes at sun_0 ... sun_T.
+    Actions: sun_{t+1} - sun_t.
+    """
+    scene_data = _generate_scene_data(
+        random_projection=random_projection,
+        randomize_objects=randomize_objects,
+        add_shadows=False,
+    )
+
+    sun_positions = np.stack([random_point_on_sphere() for _ in range(num_steps)]).astype(np.float32)
+    sun_deltas = (sun_positions[1:] - sun_positions[:-1]).astype(np.float32)
+
+    u_range, v_range = _render_ranges_for_lights(scene_data, sun_positions)
+    images = [
+        render_scene_with_light(
+            scene_data,
+            sun_pos,
+            img_width=img_width,
+            img_height=img_height,
+            u_range=u_range,
+            v_range=v_range,
+        )
+        for sun_pos in sun_positions
+    ]
+    images = np.stack(images).astype(np.float32)
+
+    if return_scene_data:
+        scene_data = dict(scene_data)
+        scene_data.update({
+            "sun_positions": sun_positions,
+            "sun_deltas": sun_deltas,
+            "u_range": u_range,
+            "v_range": v_range,
+        })
+        return images, sun_deltas, scene_data
+
+    return images, sun_deltas
+
+
 def _generate_scene_data(random_projection=True, randomize_objects=True, add_shadows=True):
     """
     Internal helper to generate all scene data.

@@ -130,6 +130,7 @@ dmypy.json
 models_checkpoints/
 
 # Training outputs
+outputs/
 training_curve.png
 light_predictor.pth
 

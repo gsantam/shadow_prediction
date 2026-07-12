@@ -140,19 +140,37 @@ class BaseTrainer:
             (output, target, loss): Model output, ground truth, and loss value
         """
         raise NotImplementedError("Subclass must implement forward_pass()")
+
+    def get_progress_metrics(self):
+        """Return extra scalar metrics for progress bars. Override if needed."""
+        return {}
     
     def validate(self):
         """Run validation loop."""
         self.model.eval()
         running_loss = 0.0
+        metric_sums = {}
+        metric_count = 0
         
         with torch.no_grad():
             pbar = tqdm(self.val_loader, desc='Validation')
             for batch in pbar:
                 _, _, loss = self.forward_pass(batch)
                 running_loss += loss.item()
-                pbar.set_postfix({'val_loss': f'{running_loss / (pbar.n + 1):.4f}'})
+                metrics = self.get_progress_metrics()
+                for name, value in metrics.items():
+                    metric_sums[name] = metric_sums.get(name, 0.0) + float(value)
+                metric_count += 1
+
+                postfix = {'val_loss': f'{running_loss / (pbar.n + 1):.4f}'}
+                for name, value in metrics.items():
+                    postfix[name] = f'{float(value):.4f}'
+                pbar.set_postfix(postfix)
         
+        self.latest_val_metrics = {
+            name: value / max(metric_count, 1)
+            for name, value in metric_sums.items()
+        }
         return running_loss / len(self.val_loader)
     
     def save_checkpoint(self, epoch, global_step, train_loss, val_loss, train_losses, val_losses, is_best=False):
@@ -345,7 +363,15 @@ class BaseTrainer:
                     
                     eval_type = "Step" if not is_last_batch else "Epoch"
                     eval_id = global_step if not is_last_batch else epoch
-                    print(f"\n{eval_type} {eval_id}: Train Loss = {avg_train_loss:.4f}, Val Loss = {val_loss:.4f}")
+                    val_metrics = getattr(self, 'latest_val_metrics', {})
+                    val_metric_text = ""
+                    if val_metrics:
+                        metric_parts = [
+                            f"Val {name} = {value:.4f}"
+                            for name, value in val_metrics.items()
+                        ]
+                        val_metric_text = ", " + ", ".join(metric_parts)
+                    print(f"\n{eval_type} {eval_id}: Train Loss = {avg_train_loss:.4f}, Val Loss = {val_loss:.4f}{val_metric_text}")
                     
                     # Check if best and save checkpoint
                     new_best, is_best = self.save_if_best(val_loss, best_val_loss)
@@ -355,10 +381,13 @@ class BaseTrainer:
                     self.model.train()  # Back to train mode
                 
                 # Update progress bar
-                pbar.set_postfix({
+                postfix = {
                     'loss': f'{avg_train_loss:.4f}',
                     'step': global_step
-                })
+                }
+                for name, value in self.get_progress_metrics().items():
+                    postfix[name] = f'{float(value):.4f}'
+                pbar.set_postfix(postfix)
         
         print(f"\n✅ Training complete. Best model saved in {self.run_folder} (val_loss: {best_val_loss:.4f})")
         
