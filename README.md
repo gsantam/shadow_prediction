@@ -115,12 +115,16 @@ cues in the scene to identify the sun position. It is not a perfect proof,
 because non-sun runs also differ in weather and image distribution, but it is
 the behaviour we would expect if shadows are carrying real signal.
 
-We can look one step deeper by plotting the ViT attention scores. The image is
-split into patches, and the model has a special `CLS` token that gathers
-information from those patches before the final prediction. A `CLS`-to-patch
-attention heat map shows which image patches the final representation attends to.
+We can look one step deeper by plotting the ViT attention scores. For this
+visualization we use the coarser `vit_b_16` model, because at image size `112`
+it has 16-pixel patches and therefore a more readable `7 x 7` patch grid. The
+examples below are images where this model predicts the sun direction well, with
+angle errors between about `0.38` and `0.86` degrees. The image is split into
+patches, and the model has a special `CLS` token that gathers information from
+those patches before the final prediction. A `CLS`-to-patch attention heat map
+shows which image patches the final representation attends to.
 
-![RobotCar ViT-S/8 CLS attention patch scores](assets/robotcar_vit_s8_attention_patch_scores.png)
+![RobotCar ViT-B/16 7x7 CLS attention patch scores](assets/robotcar_vit_b16_attention_patch_scores_7x7.png)
 
 The middle column shows direct `CLS` attention in the last transformer layer. In
 plain terms: at the final layer, which patches does the model look at most when
