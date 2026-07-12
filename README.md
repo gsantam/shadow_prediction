@@ -6,13 +6,12 @@ vehicles, and other objects in that scene under different sun positions. An
 equivalent conditioning variable is a location plus a day of the year and time
 of day, from which the sun position can be estimated.
 
-The target problem is:
+This repository is a research sandbox for that problem. The intended final
+mapping is:
 
 ```text
 scene representation + sun position -> shadow mask or shadowed image
 ```
-
-This repository is a research sandbox for that problem.
 
 ## Motivating Example
 
@@ -34,16 +33,16 @@ kind of variation the project is trying to model.
 
 ## What Is In This Repo
 
-There are three related lines of work:
+The current codebase contains three related tracks:
 
-- RobotCar sun-position prediction: a simpler first task where we ask whether a
-  model can infer the sun direction from a street image and location.
-- Synthetic shadow prediction: a controlled pixel-level playground where the
-  model predicts shadow masks from simple scenes and light positions.
-- Latent shadow/world-model experiments: early prototypes where the state is a
-  shadowed scene and the action is a change in sun position.
+- Synthetic shadow experiments, where we control scene geometry, light position,
+  and rendered shadows.
+- Oxford RobotCar experiments, where we use street images plus location and
+  approximate vehicle heading to predict the sun direction.
+- Latent transition and world-model prototypes, where the state is a shadowed
+  scene and the action is a change in sun position.
 
-## RobotCar Sun-Position Prediction
+## Current Focus
 
 We start with a much simpler problem that can give us hope for the harder one:
 
@@ -65,8 +64,8 @@ In the Kaggle archive used here, the main inputs are:
 - A rough car heading estimated from nearby location points.
 - Run tags from the RobotCar SDK, including whether a run is marked as `sun`.
 
-From the timestamp and location we compute an approximate sun vector. The
-learning problem is:
+From the timestamp and location we can compute an approximate sun vector. The
+learning problem is then:
 
 ```text
 RGB image + location + heading + camera id -> sun direction
@@ -335,7 +334,7 @@ python scripts/train_shadow_world.py
 ```text
 shadow_prediction/
 ├── shadow_prediction/
-│   ├── dataset.py                    # Original synthetic light-position dataset
+│   ├── dataset.py                    # Synthetic light-position dataset
 │   ├── dataset_robotcar_sun.py        # RobotCar archive dataset
 │   ├── dataset_shadow_gen.py          # Synthetic shadow-mask generation data
 │   ├── dataset_shadow_transition.py   # Shadow transition/world-model data
