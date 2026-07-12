@@ -6,12 +6,13 @@ vehicles, and other objects in that scene under different sun positions. An
 equivalent conditioning variable is a location plus a day of the year and time
 of day, from which the sun position can be estimated.
 
-This repository is a research sandbox for that problem. The intended final
-mapping is:
+The target problem is:
 
 ```text
 scene representation + sun position -> shadow mask or shadowed image
 ```
+
+This repository is a research sandbox for that problem.
 
 ## Motivating Example
 
@@ -31,16 +32,18 @@ kind of variation the project is trying to model.
   </tr>
 </table>
 
-The current codebase contains three related tracks:
+## What Is In This Repo
 
-- Synthetic shadow experiments, where we control scene geometry, light position,
-  and rendered shadows.
-- Oxford RobotCar experiments, where we use street images plus location and
-  approximate vehicle heading to predict the sun direction.
-- Latent transition and world-model prototypes, where the state is a shadowed
-  scene and the action is a change in sun position.
+There are three related lines of work:
 
-## Current Focus
+- RobotCar sun-position prediction: a simpler first task where we ask whether a
+  model can infer the sun direction from a street image and location.
+- Synthetic shadow prediction: a controlled pixel-level playground where the
+  model predicts shadow masks from simple scenes and light positions.
+- Latent shadow/world-model experiments: early prototypes where the state is a
+  shadowed scene and the action is a change in sun position.
+
+## RobotCar Sun-Position Prediction
 
 We start with a much simpler problem that can give us hope for the harder one:
 
@@ -52,6 +55,7 @@ For this we use the Oxford RobotCar dataset. It was collected by a car driving
 around Oxford many times, across different days, seasons, weather conditions,
 and times of day. The car has several cameras, so the dataset contains street
 images from different viewing directions, plus location and timestamp metadata.
+
 In the Kaggle archive used here, the main inputs are:
 
 - RGB images from the car cameras: `stereo_centre`, `mono_left`, `mono_right`,
@@ -61,8 +65,8 @@ In the Kaggle archive used here, the main inputs are:
 - A rough car heading estimated from nearby location points.
 - Run tags from the RobotCar SDK, including whether a run is marked as `sun`.
 
-From the timestamp and location we can compute an approximate sun vector. The
-learning problem is then:
+From the timestamp and location we compute an approximate sun vector. The
+learning problem is:
 
 ```text
 RGB image + location + heading + camera id -> sun direction
@@ -150,35 +154,22 @@ moving to real street scenes.
 
 ![Synthetic pixel-level shadow prediction](assets/synthetic_shadow_pixel_predictor.png)
 
-## Project Layout
+## Next Step
+
+The next modeling step is to move from:
 
 ```text
-shadow_prediction/
-├── shadow_prediction/
-│   ├── dataset.py                    # Synthetic light-position dataset
-│   ├── dataset_robotcar_sun.py        # RobotCar archive dataset
-│   ├── dataset_shadow_gen.py          # Synthetic shadow-mask generation data
-│   ├── dataset_shadow_transition.py   # Shadow transition/world-model data
-│   ├── model.py                       # Original synthetic ResNet model
-│   ├── model_robotcar_sun.py          # ResNet/ViT RobotCar sun predictor
-│   ├── model_shadow_gen.py            # Shadow-mask generation baseline
-│   ├── model_shadow_world.py          # Latent transition/world-model modules
-│   └── robotcar_sun.py                # Sun-position and coordinate helpers
-├── scripts/
-│   ├── train.py                       # Original synthetic light predictor
-│   ├── train_robotcar_sun.py          # RobotCar sun-direction training
-│   ├── train_shadow_gen.py            # Direct shadow-mask predictor
-│   ├── train_shadow_jepa.py           # Stage-1 latent predictor + SIGReg
-│   ├── train_shadow_decoder.py        # Stage-2 latent decoder
-│   ├── train_shadow_world.py          # Joint latent world-model prototype
-│   ├── evaluate_robotcar_sun_by_camera_weather.py
-│   ├── plot_robotcar_breakdown_curves.py
-│   └── render_robotcar_vit_attention.py
-├── assets/
-├── outputs/
-├── models_checkpoints/
-└── requirements.txt
+image + location -> sun vector
 ```
+
+to:
+
+```text
+scene representation + requested sun vector -> shadow mask or shadowed image
+```
+
+For real Street View style imagery, that likely requires some combination of
+geometry, segmentation, depth, camera orientation, and explicit sun conditioning.
 
 ## Setup
 
@@ -339,28 +330,35 @@ There is also a joint world-model prototype:
 python scripts/train_shadow_world.py
 ```
 
-## What the Current Results Mean
-
-The RobotCar sun-direction model is currently an intermediate diagnostic, not a
-finished shadow predictor. Good sun-direction performance suggests that the
-model can extract illumination cues from real street images. Poor performance on
-`not_sun` runs is expected when training only on sun-tagged examples, because
-those scenes are effectively out of distribution for a shadow-based signal.
-
-The next modeling step is to move from:
+## Project Layout
 
 ```text
-image + location -> sun vector
+shadow_prediction/
+├── shadow_prediction/
+│   ├── dataset.py                    # Original synthetic light-position dataset
+│   ├── dataset_robotcar_sun.py        # RobotCar archive dataset
+│   ├── dataset_shadow_gen.py          # Synthetic shadow-mask generation data
+│   ├── dataset_shadow_transition.py   # Shadow transition/world-model data
+│   ├── model.py                       # Original synthetic ResNet model
+│   ├── model_robotcar_sun.py          # ResNet/ViT RobotCar sun predictor
+│   ├── model_shadow_gen.py            # Shadow-mask generation baseline
+│   ├── model_shadow_world.py          # Latent transition/world-model modules
+│   └── robotcar_sun.py                # Sun-position and coordinate helpers
+├── scripts/
+│   ├── train.py                       # Original synthetic light predictor
+│   ├── train_robotcar_sun.py          # RobotCar sun-direction training
+│   ├── train_shadow_gen.py            # Direct shadow-mask predictor
+│   ├── train_shadow_jepa.py           # Stage-1 latent predictor + SIGReg
+│   ├── train_shadow_decoder.py        # Stage-2 latent decoder
+│   ├── train_shadow_world.py          # Joint latent world-model prototype
+│   ├── evaluate_robotcar_sun_by_camera_weather.py
+│   ├── plot_robotcar_breakdown_curves.py
+│   └── render_robotcar_vit_attention.py
+├── assets/
+├── outputs/
+├── models_checkpoints/
+└── requirements.txt
 ```
-
-to:
-
-```text
-scene representation + requested sun vector -> shadow mask or shadowed image
-```
-
-For real Street View style imagery, that likely requires some combination of
-geometry, segmentation, depth, camera orientation, and explicit sun conditioning.
 
 ## Requirements
 
