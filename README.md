@@ -87,6 +87,28 @@ Examples from the RobotCar data:
   </tr>
 </table>
 
+### Train/Test Split
+
+For this problem we should not randomly split individual frames, because nearby
+frames on the same street can look almost identical. The target evaluation is a
+completely disjoint-street split: train and test should cover different streets
+or road segments, not nearby frames from the same drive. For the RobotCar runs
+we check the split on a map before trusting the validation numbers.
+
+Blue points are train locations and red points are held-out validation/test
+locations for the sun-tagged RobotCar subset:
+
+![Oxford RobotCar train/test location split](assets/robotcar_train_test_location_map.png)
+
+### First Result
+
+ViTs with fine patches work quite well here. At image size `112`, the
+`vit_s_8_timm` model uses 8-pixel patches, so the image is represented as a
+`14 x 14` patch grid. This worked surprisingly much better than the ResNet CNN
+baseline in our runs:
+
+![RobotCar CNN vs fine-patch ViT learning curves](assets/robotcar_resnet_vs_vit_s8_learning_curves.png)
+
 ## Project Layout
 
 ```text
